@@ -113,7 +113,7 @@ app.post('/api/analyze', async (req, res) => {
     symbol = symbol.toUpperCase();
     timeframe = timeframe.toLowerCase();
 
-    const cmd = `python analyze.py ${symbol} ${timeframe}`;
+    const cmd = `python3 analyze.py ${symbol} ${timeframe}`;
     let rawOutput;
     try {
       rawOutput = execSync(cmd, { cwd: __dirname, timeout: 30000 }).toString().trim();
