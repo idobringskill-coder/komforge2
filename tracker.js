@@ -52,11 +52,10 @@ async function checkPendingSignals() {
     'XAUUSD':'XAU/USD','XAGUSD':'XAG/USD',
     'US30':'DJI','NAS100':'NDX','SPX500':'SPX','GER40':'DAX','UK100':'FTSE','JPN225':'N225'
   };
-  const TWELVE_KEY = 'd47da60966684915bebbb5a15b9ff795';
+  const TWELVE_KEY = process.env.TWELVE_DATA_API_KEY || 'd47da60966684915bebbb5a15b9ff795';
 
   for (const sig of pending) {
     try {
-      // ✅ FIX: Checker après 15 minutes (pas 2h)
       const age = (Date.now() - new Date(sig.timestamp).getTime()) / 1000 / 60;
       if (age < 15) continue;
 
@@ -84,7 +83,6 @@ async function checkPendingSignals() {
         else if (currentPrice >= sig.sl) result = 'LOSS';
       }
 
-      // Force resolve après 24h
       if (!result && age > 1440) {
         result = currentPrice > sig.entry
           ? (sig.action === 'BUY' ? 'WIN' : 'LOSS')
@@ -104,7 +102,6 @@ async function checkPendingSignals() {
     }
   }
 
-  // Recalc stats
   const closed = tracker.signals.filter(s => s.status === 'CLOSED');
   tracker.stats = {
     total: closed.length,

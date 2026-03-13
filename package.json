@@ -1,14 +1,11 @@
 {
   "name": "komforge2",
   "version": "1.0.0",
-  "description": "",
+  "description": "KOM FORGE AI Trading Platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

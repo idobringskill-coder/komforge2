@@ -168,7 +168,6 @@ def analyze(symbol, timeframe):
         factor = price / 32
         for col in ["open","high","low","close"]: df[col] = df[col] / factor
         c = df["close"]; price = round(float(c.iloc[-1]), 2)
-    # ✅ FIX 2: ATR recalculé APRÈS correction prix Gold/Silver
 
     e20  = round(float(ema(c, 20).iloc[-1]), 5)
     e50  = round(float(ema(c, 50).iloc[-1]), 5)
@@ -177,7 +176,6 @@ def analyze(symbol, timeframe):
     rsi_val = round(float(rsi_wilder(c, 14).iloc[-1]), 2)
     rsi_val = max(0, min(100, rsi_val))
 
-    # RSI direction — remonte ou descend ?
     rsi_series = rsi_wilder(c, 14)
     rsi_prev = round(float(rsi_series.iloc[-4]), 2)
     rsi_rising = rsi_val > rsi_prev
@@ -212,7 +210,6 @@ def analyze(symbol, timeframe):
     tp_sell = round(price - at * 2.0, 5)
     sl_sell = round(price + at * 1.0, 5)
 
-    # ── SCORING ──
     bull_score = 0
     bear_score = 0
     confluence_reasons = []
@@ -256,7 +253,6 @@ def analyze(symbol, timeframe):
     else:
         confluence_reasons.append(f"RSI neutral ({rsi_val}) ⚠️")
 
-    # RSI direction bonus
     if rsi_rising and rsi_val < 50:
         bull_score += 1; confluence_reasons.append(f"RSI rising from low ({rsi_prev}→{rsi_val}) ✅")
     elif not rsi_rising and rsi_val > 50:
@@ -272,11 +268,11 @@ def analyze(symbol, timeframe):
         bear_score += 1; confluence_reasons.append(f"StochRSI K<D ❌")
 
     if bb_position == "lower":
-        bull_score += 2; confluence_reasons.append("BB lower band — bounce zone ✅")
+        bull_score += 2; confluence_reasons.append("BB lower band - bounce zone ✅")
     elif bb_position == "upper":
-        bear_score += 2; confluence_reasons.append("BB upper band — reversal zone ✅")
+        bear_score += 2; confluence_reasons.append("BB upper band - reversal zone ✅")
     if bb_squeeze:
-        confluence_reasons.append("BB squeeze — breakout imminent ⚡")
+        confluence_reasons.append("BB squeeze - breakout imminent ⚡")
 
     if rel_vol >= 1.5:
         if bull_score > bear_score:
@@ -286,7 +282,7 @@ def analyze(symbol, timeframe):
     elif rel_vol < 0.7:
         bull_score = max(0, bull_score - 1)
         bear_score = max(0, bear_score - 1)
-        confluence_reasons.append(f"Low volume — weak signal ({rel_vol}x) ⚠️")
+        confluence_reasons.append(f"Low volume - weak signal ({rel_vol}x) ⚠️")
 
     if mkt_structure == "bullish_structure":
         bull_score += 3; confluence_reasons.append("Bullish structure (HH+HL) ✅")
@@ -299,8 +295,6 @@ def analyze(symbol, timeframe):
     bull_pct = (bull_score / total) * 100 if total > 0 else 50
     confluence_count = len([s for s in confluence_reasons if "✅" in s])
 
-    # ── DÉTECTION DIVERGENCE HAUSSIÈRE ──
-    # RSI oversold/bearish zone MAIS MACD bullish + RSI remonte = rebond probable
     bullish_divergence = (
         rsi_val < 45 and
         msig == "bullish" and
@@ -308,7 +302,6 @@ def analyze(symbol, timeframe):
         stoch_k > 60
     )
 
-    # RSI overbought/bullish zone MAIS MACD bearish + RSI descend = chute probable
     bearish_divergence = (
         rsi_val > 55 and
         msig == "bearish" and
@@ -316,80 +309,63 @@ def analyze(symbol, timeframe):
         stoch_k < 40
     )
 
-    # ── BB SQUEEZE — forcer WAIT ──
     squeeze_wait = bb_squeeze and rel_vol < 0.8
-
-    # ✅ FIX 1: Volume mort = pas de signal fiable
     dead_volume = rel_vol < 0.5
-
     rsi_neutral = 40 <= rsi_val <= 60
     weak_signal = confluence_count < 3 or (rsi_neutral and abs(bull_pct - 50) < 15)
 
-    # ── DÉCISION FINALE ──
     if dead_volume:
         action_hint = "WAIT"
         confidence = 35
-        obs = f"Volume too low ({rel_vol}x) — no conviction, wait for volume"
-
+        obs = f"Volume too low ({rel_vol}x) - no conviction, wait for volume"
     elif squeeze_wait:
         action_hint = "WAIT"
         confidence = 40
-        obs = "BB squeeze + low volume — wait for breakout confirmation"
-
+        obs = "BB squeeze + low volume - wait for breakout confirmation"
     elif bullish_divergence and bull_pct < 50:
-        # EMA bearish mais momentum dit rebond — WAIT, pas SELL
         action_hint = "WAIT"
         confidence = 45
-        obs = f"Bullish divergence — RSI rising ({rsi_prev}→{rsi_val}) + MACD bullish despite bearish trend, avoid SELL"
-        confluence_reasons.append("⚠️ Bullish divergence detected — SELL blocked")
-
+        obs = f"Bullish divergence - RSI rising ({rsi_prev}→{rsi_val}) + MACD bullish despite bearish trend, avoid SELL"
+        confluence_reasons.append("⚠️ Bullish divergence detected - SELL blocked")
     elif bearish_divergence and bull_pct > 50:
         action_hint = "WAIT"
         confidence = 45
-        obs = "Bearish divergence — RSI falling + MACD bearish despite bullish trend, avoid BUY"
-        confluence_reasons.append("⚠️ Bearish divergence detected — BUY blocked")
-
+        obs = "Bearish divergence - RSI falling + MACD bearish despite bullish trend, avoid BUY"
+        confluence_reasons.append("⚠️ Bearish divergence detected - BUY blocked")
     elif weak_signal:
         action_hint = "WAIT"
         confidence = max(30, int(30 + abs(bull_pct - 50)))
-        obs = "Weak confluence — wait for clearer setup"
-
+        obs = "Weak confluence - wait for clearer setup"
     elif bull_pct >= 65:
         action_hint = "BUY"
         confidence = min(92, int(50 + (bull_pct - 50) * 2.2))
         obs = f"Strong bullish confluence ({confluence_count} confirmations)"
-
     elif bull_pct <= 35:
         action_hint = "SELL"
         confidence = min(92, int(50 + (50 - bull_pct) * 2.2))
         obs = f"Strong bearish confluence ({confluence_count} confirmations)"
-
     elif bull_pct >= 58:
         action_hint = "BUY"
         confidence = min(72, int(50 + (bull_pct - 50) * 1.8))
-        obs = "Moderate bullish setup — monitor closely"
-
+        obs = "Moderate bullish setup - monitor closely"
     elif bull_pct <= 42:
         action_hint = "SELL"
         confidence = min(72, int(50 + (50 - bull_pct) * 1.8))
-        obs = "Moderate bearish setup — monitor closely"
-
+        obs = "Moderate bearish setup - monitor closely"
     else:
         action_hint = "WAIT"
         confidence = max(35, int(35 + abs(bull_pct - 50) * 2))
-        obs = "Mixed signals — wait for clarity"
+        obs = "Mixed signals - wait for clarity"
 
-    # ✅ FIX 3: Cap confidence si volume faible
     if rel_vol < 0.5:
         confidence = min(confidence, 55)
     elif rel_vol < 0.7:
         confidence = min(confidence, 70)
 
-    # ── Override observations spécifiques ──
     if rsi_val > 70 and action_hint == "SELL":
-        obs = "RSI overbought — reversal risk confirmed"
+        obs = "RSI overbought - reversal risk confirmed"
     elif rsi_val < 30 and action_hint == "BUY":
-        obs = "RSI oversold — bounce potential confirmed"
+        obs = "RSI oversold - bounce potential confirmed"
     elif trend == "uptrend" and msig == "bullish" and mkt_structure == "bullish_structure" and action_hint == "BUY":
         obs = "Triple confluence: uptrend + MACD bullish + bullish structure"
     elif trend == "downtrend" and msig == "bearish" and mkt_structure == "bearish_structure" and action_hint == "SELL":

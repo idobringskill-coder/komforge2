@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { execSync } = require('child_process');
@@ -34,7 +35,7 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   }
 }));
@@ -113,20 +114,15 @@ function requireAuth(req, res, next) {
 }
 
 // ── AUTH ROUTES ──
-
-// Register
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, password, email } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) return res.status(409).json({ error: 'Username already taken' });
-
     const hash = await bcrypt.hash(password, 10);
     const result = db.prepare('INSERT INTO users (username, password, email, plan) VALUES (?, ?, ?, ?)').run(username, hash, email || null, 'beta');
-
     const user = { id: result.lastInsertRowid, username, plan: 'beta' };
     req.session.user = user;
     res.json({ success: true, user });
@@ -135,18 +131,14 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-
     const row = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
     if (!row) return res.status(401).json({ error: 'Invalid credentials' });
-
     const valid = await bcrypt.compare(password, row.password);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-
     const user = { id: row.id, username: row.username, plan: row.plan, email: row.email };
     req.session.user = user;
     res.json({ success: true, user });
@@ -155,31 +147,25 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Logout
 app.post('/api/auth/logout', (req, res) => {
   req.session.destroy();
   res.json({ success: true });
 });
 
-// Me
 app.get('/api/auth/me', (req, res) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Not logged in' });
   res.json({ user: req.session.user });
 });
 
-// Admin create user
 app.post('/api/admin/create-user', async (req, res) => {
   try {
     const { username, password, email, plan, adminKey } = req.body;
     if (adminKey !== ADMIN_KEY) return res.status(403).json({ error: 'Invalid admin key' });
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) return res.status(409).json({ error: 'Username already exists' });
-
     const hash = await bcrypt.hash(password, 10);
     const result = db.prepare('INSERT INTO users (username, password, email, plan) VALUES (?, ?, ?, ?)').run(username, hash, email || null, plan || 'beta');
-
     res.json({ success: true, userId: result.lastInsertRowid, username, plan: plan || 'beta' });
   } catch(err) {
     res.status(500).json({ error: err.message });
@@ -205,7 +191,6 @@ async function fetchMarketNews(symbol, displaySymbol) {
     } else {
       query = `Latest news affecting ${displaySymbol} today ${new Date().toISOString().slice(0,10)}. 3 sentences max.`;
     }
-
     const r = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PERPLEXITY_API_KEY}` },
@@ -227,7 +212,9 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
     symbol = symbol.toUpperCase();
     timeframe = timeframe.toLowerCase();
 
-    const cmd = `python3 analyze.py ${symbol} ${timeframe}`;
+    // Use absolute path for venv python3
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+    const cmd = `${pythonBin} analyze.py ${symbol} ${timeframe}`;
     let rawOutput;
     try {
       rawOutput = execSync(cmd, { cwd: __dirname, timeout: 30000 }).toString().trim();
@@ -243,7 +230,6 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
     const displaySymbol = formatSymbolDisplay(symbol);
     const marketType = getMarketType(symbol);
     const newsContext = await fetchMarketNews(symbol, displaySymbol);
-
     const confluenceList = (market.confluence_reasons || []).join('\n- ');
 
     const prompt = `You are KOM FORGE, an elite institutional trading analyst with 20+ years experience.
@@ -360,5 +346,5 @@ setInterval(async () => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`\n  ⚡ KOM FORGE v3.0 running on port ${PORT}\n  🔐 Auth enabled · 📡 WebSocket · 🤖 Claude + Perplexity\n`);
+  console.log(`\n  ⚡ KOM FORGE v2.2 running on port ${PORT}\n  🔐 Auth enabled · 📡 WebSocket · 🤖 Claude + Perplexity\n`);
 });
