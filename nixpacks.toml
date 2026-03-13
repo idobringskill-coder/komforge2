@@ -1,2 +1,5 @@
 [phases.setup]
-nixPkgs = ["python311", "nodejs_20"]
+nixPkgs = ["nodejs_20", "python3"]
+
+[start]
+cmd = "node server.js"
